@@ -10,13 +10,14 @@
             margin: 0;
             padding: 0;
             overflow: hidden;
+            background: #000;
         }
         #info {
             position: absolute;
             top: 10px;
             left: 10px;
             background: rgba(0,0,0,0.7);
-            color: white;
+            color: #fff;
             padding: 8px 14px;
             border-radius: 5px;
             font-family: Arial, sans-serif;
@@ -29,124 +30,205 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            color: white;
+            color: #fff;
             font-family: Arial, sans-serif;
             font-size: 18px;
             z-index: 1000;
             background: rgba(0,0,0,0.8);
             padding: 20px 40px;
             border-radius: 8px;
+            text-align: center;
+        }
+        #loading span {
+            display: block;
+            font-size: 14px;
+            color: #aaa;
+            margin-top: 8px;
         }
     </style>
 </head>
 <body>
-    <div id="loading">⏳ Cargando CesiumJS...</div>
+    <div id="loading">
+        ⏳ Cargando CesiumJS...
+        <span>Esperando 2 segundos para iniciar el visor</span>
+    </div>
     <div id="info">🌍 Visor 3D - Ucrania</div>
     <div id="cesiumContainer"></div>
 
+    <!-- Cargar CesiumJS -->
     <script src="https://cesium.com/downloads/cesiumjs/releases/1.128/Build/Cesium/Cesium.js">
     </script>
     <link href="https://cesium.com/downloads/cesiumjs/releases/1.128/Build/Cesium/Widgets/widgets.css" 
           rel="stylesheet">
 
     <script>
-        // --- CONFIGURACIÓN ---
-        // Token restringido a https://jaspeado.github.io/
-        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzMzVhMzc5NS02YmNjLTQwMTUtYjIyMC03YWQ5ZDJjYWY4M2QiLCJpZCI6NDUwMjY4LCJzdWIiOiJqYXZpZ2VvIiwiaXNzIjoiaHR0cHM6Ly9hcGkuY2VzaXVtLmNvbSIsImF1ZCI6IlZpc29yIEdpdEh1YiBQYWdlcyIsImlhdCI6MTc4Mjc0NTQwMH0.NzbI9bglV_dWgoFQLat_euWpVpJhRkOE8NQwcAaEek8';  // ← REEMPLAZA ESTO
-        
+        // ----------------------------------------------------------------
+        // 1. CONFIGURACIÓN
+        // ----------------------------------------------------------------
+        const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzMzVhMzc5NS02YmNjLTQwMTUtYjIyMC03YWQ5ZDJjYWY4M2QiLCJpZCI6NDUwMjY4LCJzdWIiOiJqYXZpZ2VvIiwiaXNzIjoiaHR0cHM6Ly9hcGkuY2VzaXVtLmNvbSIsImF1ZCI6IlZpc29yIEdpdEh1YiBQYWdlcyIsImlhdCI6MTc4Mjc0NTQwMH0.NzbI9bglV_dWgoFQLat_euWpVpJhRkOE8NQwcAaEek8';
         const GEOJSON_URL = 'https://raw.githubusercontent.com/jaspeado/firms-ukraine-tracker/main/fires.geojson';
-        
-        // --- CREAR VISOR (SIN TERRENO AÚN) ---
-        const viewer = new Cesium.Viewer('cesiumContainer', {
-            baseLayerPicker: false,
-            infoBox: false,
-            selectionIndicator: false,
-            navigationHelpButton: false,
-            timeline: false,
-            animation: false,
-        });
-        
-        // --- ✅ TERRENO 3D CORRECTO (Cesium 1.128) ---
-        // Usamos CesiumTerrainProvider con la URL de Cesium World Terrain
-        const terrainProvider = new Cesium.CesiumTerrainProvider({
-            url: 'https://assets.cesium.com/1/'
-        });
-        viewer.terrainProvider = terrainProvider;
-        
-        // --- IMAGEN DE SATÉLITE ---
-        viewer.imageryLayers.addImageryProvider(
-            new Cesium.ArcGisMapServerImageryProvider({
-                url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer'
-            })
-        );
-        
-        // --- CARGAR DATOS DE INCENDIOS ---
-        fetch(GEOJSON_URL)
-            .then(response => response.json())
-            .then(data => {
-                const features = data.features;
-                console.log('📊 Cargando ' + features.length + ' puntos...');
-                
-                // Filtrar: FRP > 10 MW
-                const filtered = features.filter(f => {
-                    const props = f.properties;
-                    const frp = props.frp || 0;
-                    return frp > 10;
+
+        // ----------------------------------------------------------------
+        // 2. FUNCIÓN QUE INICIA EL VISOR
+        // ----------------------------------------------------------------
+        function iniciarVisor() {
+            try {
+                console.log('🚀 Iniciando visor con token:', CESIUM_TOKEN.substring(0, 20) + '...');
+
+                // Configurar token
+                Cesium.Ion.defaultAccessToken = CESIUM_TOKEN;
+
+                // Crear visor
+                const viewer = new Cesium.Viewer('cesiumContainer', {
+                    baseLayerPicker: false,
+                    infoBox: false,
+                    selectionIndicator: false,
+                    navigationHelpButton: false,
+                    timeline: false,
+                    animation: false,
+                    geocoder: false,
+                    homeButton: false,
+                    sceneModePicker: false,
                 });
-                
-                // Limitar a 500 puntos
-                const limited = filtered.slice(0, 500);
-                console.log('✅ Mostrando ' + limited.length + ' puntos');
-                
-                // Crear entidades en Cesium
-                limited.forEach(f => {
-                    const coords = f.geometry.coordinates;
-                    const props = f.properties;
-                    const size = Math.max(5, Math.min(20, props.frp / 10));
-                    
-                    viewer.entities.add({
-                        position: Cesium.Cartesian3.fromDegrees(coords[0], coords[1], 0),
-                        point: {
-                            pixelSize: size,
-                            color: Cesium.Color.RED,
-                            outlineColor: Cesium.Color.YELLOW,
-                            outlineWidth: 2,
-                            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-                        },
-                        properties: {
-                            frp: props.frp,
-                            date: props.acq_date
-                        }
+
+                // Terreno 3D
+                try {
+                    const terrainProvider = new Cesium.CesiumTerrainProvider({
+                        url: 'https://assets.cesium.com/1/'
                     });
-                });
-                
-                // Ocultar loading
-                document.getElementById('loading').style.display = 'none';
-                
-                // Actualizar info
-                document.getElementById('info').textContent = 
-                    '🌍 Visor 3D | ' + limited.length + ' incendios | FRP > 10 MW';
-                
-                // Volar a Ucrania
-                viewer.camera.flyTo({
-                    destination: Cesium.Cartesian3.fromDegrees(32.0, 48.5, 500000),
-                    duration: 2
-                });
-            })
-            .catch(error => {
-                console.error('❌ Error cargando datos:', error);
-                document.getElementById('loading').textContent = '❌ Error cargando datos';
-            });
-        
-        // --- CLIC PARA INFORMACIÓN ---
-        const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-        handler.setInputAction(function(e) {
-            const picked = viewer.scene.pick(e.position);
-            if (picked && picked.id && picked.id.properties) {
-                const p = picked.id.properties;
-                alert('🔥 FRP: ' + p.frp.getValue() + ' MW\n📅 Fecha: ' + p.date.getValue());
+                    viewer.terrainProvider = terrainProvider;
+                    console.log('✅ Terreno configurado');
+                } catch (e) {
+                    console.warn('⚠️ Error en terreno:', e.message);
+                }
+
+                // Imagen satélite
+                try {
+                    viewer.imageryLayers.addImageryProvider(
+                        new Cesium.ArcGisMapServerImageryProvider({
+                            url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer'
+                        })
+                    );
+                    console.log('✅ Imagery configurada');
+                } catch (e) {
+                    console.warn('⚠️ Error en imagery:', e.message);
+                }
+
+                // ----------------------------------------------------------------
+                // 3. CARGAR DATOS DE INCENDIOS
+                // ----------------------------------------------------------------
+                console.log('📡 Cargando datos desde:', GEOJSON_URL);
+
+                fetch(GEOJSON_URL)
+                    .then(response => {
+                        if (!response.ok) throw new Error('HTTP ' + response.status);
+                        return response.json();
+                    })
+                    .then(data => {
+                        const features = data.features || [];
+                        console.log('📊 Total puntos:', features.length);
+
+                        // Filtrar FRP > 10 MW
+                        const filtered = features.filter(f => {
+                            const frp = f.properties?.frp || 0;
+                            return frp > 10;
+                        });
+                        console.log('📊 FRP > 10:', filtered.length);
+
+                        // Limitar a 500 puntos
+                        const limited = filtered.slice(0, 500);
+                        console.log('📊 Mostrando:', limited.length);
+
+                        // Crear entidades
+                        limited.forEach((f, index) => {
+                            const coords = f.geometry.coordinates;
+                            const props = f.properties;
+                            const size = Math.max(5, Math.min(20, (props.frp || 10) / 10));
+
+                            viewer.entities.add({
+                                position: Cesium.Cartesian3.fromDegrees(coords[0], coords[1], 0),
+                                point: {
+                                    pixelSize: size,
+                                    color: Cesium.Color.RED,
+                                    outlineColor: Cesium.Color.YELLOW,
+                                    outlineWidth: 2,
+                                    heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                                },
+                                properties: {
+                                    frp: props.frp || 0,
+                                    date: props.acq_date || 'N/A'
+                                }
+                            });
+                        });
+
+                        // Ocultar loading
+                        document.getElementById('loading').style.display = 'none';
+
+                        // Actualizar info
+                        document.getElementById('info').textContent =
+                            '🌍 Visor 3D | ' + limited.length + ' incendios | FRP > 10 MW';
+
+                        console.log('✅ Visor listo, puntos cargados:', limited.length);
+
+                        // Volar a Ucrania
+                        viewer.camera.flyTo({
+                            destination: Cesium.Cartesian3.fromDegrees(32.0, 48.5, 500000),
+                            duration: 2
+                        });
+
+                    })
+                    .catch(error => {
+                        console.error('❌ Error cargando datos:', error);
+                        document.getElementById('loading').innerHTML =
+                            '❌ Error cargando datos<br><span>' + error.message + '</span>';
+                        document.getElementById('loading').style.display = 'block';
+                    });
+
+                // ----------------------------------------------------------------
+                // 4. CLIC PARA INFORMACIÓN
+                // ----------------------------------------------------------------
+                const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+                handler.setInputAction(function(e) {
+                    const picked = viewer.scene.pick(e.position);
+                    if (picked && picked.id && picked.id.properties) {
+                        const p = picked.id.properties;
+                        alert('🔥 FRP: ' + p.frp.getValue() + ' MW\n📅 Fecha: ' + p.date.getValue());
+                    }
+                }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+            } catch (error) {
+                console.error('❌ Error al iniciar visor:', error);
+                document.getElementById('loading').innerHTML =
+                    '❌ Error al iniciar Cesium<br><span>' + error.message + '</span>';
+                document.getElementById('loading').style.display = 'block';
             }
-        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+        }
+
+        // ----------------------------------------------------------------
+        // 5. ESPERAR 2 SEGUNDOS Y ARRANCAR
+        // ----------------------------------------------------------------
+        document.getElementById('loading').textContent = '⏳ Cargando CesiumJS...';
+        document.getElementById('loading').style.display = 'block';
+
+        // Esperar 2 segundos para asegurar que CesiumJS ha cargado
+        setTimeout(function() {
+            if (typeof Cesium !== 'undefined') {
+                console.log('✅ CesiumJS cargado, iniciando visor...');
+                iniciarVisor();
+            } else {
+                console.warn('⚠️ CesiumJS no está listo, reintentando...');
+                document.getElementById('loading').innerHTML =
+                    '⏳ CesiumJS no está listo, reintentando...<span>Espera un momento</span>';
+                setTimeout(function() {
+                    if (typeof Cesium !== 'undefined') {
+                        iniciarVisor();
+                    } else {
+                        document.getElementById('loading').innerHTML =
+                            '❌ CesiumJS no se pudo cargar<br><span>Revisa tu conexión a internet</span>';
+                    }
+                }, 3000);
+            }
+        }, 2000);
     </script>
 </body>
 </html>
