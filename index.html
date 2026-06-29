@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Visor 3D - Ucrania</title>
+    <style>
+        html, body, #cesiumContainer {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 8px 14px;
+            border-radius: 5px;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">🌍 Cargando Cesium...</div>
+    <div id="cesiumContainer"></div>
+
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.128/Build/Cesium/Cesium.js">
+    </script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.128/Build/Cesium/Widgets/widgets.css" 
+          rel="stylesheet">
+
+    <script>
+        // --- CONFIGURACIÓN ---
+        const CESIUM_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzMzVhMzc5NS02YmNjLTQwMTUtYjIyMC03YWQ5ZDJjYWY4M2QiLCJpZCI6NDUwMjY4LCJzdWIiOiJqYXZpZ2VvIiwiaXNzIjoiaHR0cHM6Ly9hcGkuY2VzaXVtLmNvbSIsImF1ZCI6IlZpc29yIEdpdEh1YiBQYWdlcyIsImlhdCI6MTc4Mjc0NTQwMH0.NzbI9bglV_dWgoFQLat_euWpVpJhRkOE8NQwcAaEek8';  // Reemplaza con tu token
+        const GEOJSON_URL = 'https://raw.githubusercontent.com/jaspeado/firms-ukraine-tracker/main/fires.geojson';
+        
+        Cesium.Ion.defaultAccessToken = CESIUM_TOKEN;
+        
+        // --- CREAR VISOR CON TERRENO 3D REAL ---
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+            terrainProvider: Cesium.createWorldTerrain(),
+            baseLayerPicker: false,
+            infoBox: false,
+            selectionIndicator: false,
+            navigationHelpButton: false,
+            timeline: false,
+            animation: false,
+        });
+        
+        // --- IMAGEN DE SATÉLITE ---
+        viewer.imageryLayers.addImageryProvider(
+            new Cesium.ArcGisMapServerImageryProvider({
+                url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer'
+            })
+        );
+        
+        // --- CARGAR DATOS DE INCENDIOS ---
+        fetch(GEOJSON_URL)
+            .then(response => response.json())
+            .then(data => {
+                const features = data.features;
+                console.log('📊 Cargando ' + features.length + ' puntos...');
+                
+                // Filtrar: FRP > 10 MW, últimas 48h
+                const now = new Date();
+                const filtered = features.filter(f => {
+                    const props = f.properties;
+                    const frp = props.frp || 0;
+                    const date = new Date(props.acq_date);
+                    const hoursDiff = (now - date) / (1000 * 60 * 60);
+                    return frp > 10 && hoursDiff < 48;
+                });
+                
+                // Limitar a 500 puntos
+                const limited = filtered.slice(0, 500);
+                console.log('✅ Mostrando ' + limited.length + ' puntos');
+                
+                // Crear entidades en Cesium
+                limited.forEach(f => {
+                    const coords = f.geometry.coordinates;
+                    const props = f.properties;
+                    const size = Math.max(5, Math.min(20, props.frp / 10));
+                    
+                    viewer.entities.add({
+                        position: Cesium.Cartesian3.fromDegrees(coords[0], coords[1], 0),
+                        point: {
+                            pixelSize: size,
+                            color: Cesium.Color.RED,
+                            outlineColor: Cesium.Color.YELLOW,
+                            outlineWidth: 2,
+                            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                        },
+                        properties: {
+                            frp: props.frp,
+                            date: props.acq_date
+                        }
+                    });
+                });
+                
+                // Actualizar info
+                document.getElementById('info').textContent = 
+                    '🌍 Visor 3D | ' + limited.length + ' incendios | FRP > 10 MW | Clic para detalles';
+                
+                // Volar a Ucrania
+                viewer.camera.flyTo({
+                    destination: Cesium.Cartesian3.fromDegrees(32.0, 48.5, 500000),
+                    duration: 2
+                });
+            })
+            .catch(error => {
+                console.error('❌ Error cargando datos:', error);
+                document.getElementById('info').textContent = '❌ Error cargando datos';
+            });
+        
+        // --- CLIC PARA INFORMACIÓN ---
+        const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+        handler.setInputAction(function(e) {
+            const picked = viewer.scene.pick(e.position);
+            if (picked && picked.id && picked.id.properties) {
+                const p = picked.id.properties;
+                alert('🔥 FRP: ' + p.frp.getValue() + ' MW\n📅 Fecha: ' + p.date.getValue());
+            }
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+    </script>
+</body>
+</html>
